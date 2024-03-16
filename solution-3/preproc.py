@@ -22,6 +22,8 @@ with open("smalltrees.pkl","wb") as file:
     pickle.dump(tree_dict,file)
 with open("bigtrees.pkl","wb") as file:
     pickle.dump(tree_dict1,file)
+
+#df.groupby(["dmg_type","dmg"]).count().reset_index()[["dmg_type","dmg"]].to_parquet("compute_workfile.parquet")
 with open("dtypes.npy","wb") as file:
     np.save(file,df["dmg_type"].unique(),allow_pickle=True)
 df[["dmg_type","dmg"]].to_parquet("dmgs.parquet")

@@ -26,7 +26,7 @@ for dt in dtypes:
         #print(type([valid_dmgs]))
         if len(valid_dmgs)==0:
             dmg_list.append(0)
-        elif len(valid_dmgs)<30:
+        elif len(valid_dmgs)<20:
 
             dmg_list.append(valid_dmgs[pd.Series([tree_dict[dt][dmg].query(row[["x","y"]])[0] for
                 dmg in valid_dmgs]).idxmin()])   
