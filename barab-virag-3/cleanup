@@ -1,0 +1,2 @@
+python cleanup.py
+pkill -f flask_server
