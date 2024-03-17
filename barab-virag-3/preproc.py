@@ -1,9 +1,8 @@
 import flask
 import pandas as pd
 from scipy import spatial
-import pickle
 import numpy as np
-
+import polars as pl
 
 app = flask.Flask(__name__)
 ###Preproc
@@ -21,16 +20,60 @@ for dt in df["dmg_type"].unique():
     tree = spatial.cKDTree(df.loc[(df["dmg_type"] == dt),["x","y"]])
     tree_dict[dt] = inner_dict
     tree_dict1[dt] = tree
-"""
 
-"""
-with open("smalltrees.pkl","wb") as file:
-    pickle.dump(tree_dict,file)
-with open("bigtrees.pkl","wb") as file:
-    pickle.dump(tree_dict1,file)
+dtypes = df["dmg_type"].unique()
+dmgs = pl.DataFrame(df[["dmg_type","dmg"]])
+unique_dmgs = pl.DataFrame(df[["dmg_type","dmg"]].drop_duplicates())
 
-df.groupby(["dmg_type","dmg"]).count().reset_index()[["dmg_type","dmg"]].to_parquet("compute_workfile.parquet")
-with open("dtypes.npy","wb") as file:
-    np.save(file,df["dmg_type"].unique(),allow_pickle=True)
-df[["dmg_type","dmg"]].to_parquet("dmgs.parquet")
-df[["dmg_type","dmg"]].drop_duplicates().to_parquet("dmgs_unique.parquet")
+### Compute
+@app.route("/ping")
+def ping():
+    query_df = pd.read_csv("query.csv")
+    query_df = pl.DataFrame(query_df)
+    out_df = pl.DataFrame()
+    for dt in dtypes:
+        dmg_list = []
+        temp_dmgs = dmgs.filter(
+            dmgs["dmg_type"] == dt
+        ).select(
+            pl.col("dmg")
+        )
+        for row in query_df.rows():
+            valid_dmgs = unique_dmgs.filter(
+                (unique_dmgs["dmg"] >= row[2])&
+                (unique_dmgs["dmg"] <= row[3])&
+                (unique_dmgs["dmg_type"] == dt)
+            )["dmg"]
+
+            if len(valid_dmgs)==0:
+                    dmg_list.append(0)
+
+            elif len(valid_dmgs)>0 and len(valid_dmgs)<30:
+                dmg_list.append(valid_dmgs[pd.Series([tree_dict[dt][dmg].query(row[0:2])[0] for
+                    dmg in valid_dmgs]).idxmin()])  
+            else:
+                counter = 1
+                while True:
+                        if counter == 1:
+                            index = tree_dict1[dt].query(row[0:2])[1]
+                        else:
+                            index = tree_dict1[dt].query(row[0:2],k=counter)[1][-1]
+                        if (temp_dmgs.item(index,0) >= row[2]) and (temp_dmgs.item(index,0) <= row[3]):
+                            dmg_list.append(temp_dmgs.item(index,0))
+                            break
+                        else:
+                            counter += 1                  
+
+        out_df = out_df.with_columns(pl.Series(dt,dmg_list))
+
+    out_df.write_csv("out.csv")
+    return "OK"
+
+
+@app.route("/")
+def ok():
+    return "OK"
+
+
+if __name__ == "__main__":
+    app.run(port=5678)
